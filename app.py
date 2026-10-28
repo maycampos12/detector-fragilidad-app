@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import time
+import io
 from scipy import stats
 
 st.set_page_config(page_title="Mo-Vida | Fragilidad", page_icon="🏃‍♂️", layout="wide")
@@ -19,7 +20,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# COHORTE INTERNA INCRUSTADA (41 PACIENTES REALES BASE)
+# COHORTE INTERNA INCRUSTADA
 # ---------------------------------------------------------
 SCORES_COHORTE_41 = [
     12.5, 15.0, 18.2, 21.0, 24.5, 28.1, 31.5, 34.0, 36.5, 39.2, 
@@ -191,7 +192,7 @@ Tú (Posición {int(percentil_cohorte)})
             st.markdown(html_resultado, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# LÓGICA REESCRITA: PESTAÑA 2 (ANÁLISIS MASIVO)
+# PESTAÑA 2 (ANÁLISIS MASIVO) - AHORA EXPORTA A EXCEL NATIVO
 # ---------------------------------------------------------
 with tab2:
     st.markdown("### 📊 Análisis Clínico Masivo (Lote)")
@@ -213,19 +214,16 @@ marcha_longitud_zancada_izq_m
     archivo_subido = st.file_uploader("Cargar registros de pacientes (.xlsx o .csv)", type=['xlsx', 'csv'])
     
     if archivo_subido:
-        # Leer el archivo dependiendo de la extensión
         try:
             df_nuevos = pd.read_csv(archivo_subido) if archivo_subido.name.endswith('.csv') else pd.read_excel(archivo_subido)
             st.success(f"✅ Archivo cargado correctamente: {len(df_nuevos)} pacientes listos para evaluación.")
             
             if st.button("Ejecutar Procesamiento de Cohorte", type="primary"):
-                with st.spinner('Analizando datos biomecánicos...'):
+                with st.spinner('Analizando datos biomecánicos y generando Excel...'):
                     time.sleep(1.5)
                     resultados = []
                     
-                    # Iterar sobre cada paciente subido
                     for idx, row in df_nuevos.iterrows():
-                        # Extraer datos o usar medianas si faltan
                         v = row.get('marcha_velocidad_ms', 1.0)
                         t = row.get('tug_tug_tiempo_total_s', 12.0)
                         r = row.get('marcha_ratio_armonico', 1.3)
@@ -235,7 +233,6 @@ marcha_longitud_zancada_izq_m
                         p = row.get('marcha_propulsion_der', 6.0)
                         z = row.get('marcha_longitud_zancada_izq_m', 1.1)
                         
-                        # Limpiar celdas vacías (NaN) en el Excel
                         v = v if pd.notna(v) else 1.0
                         t = t if pd.notna(t) else 12.0
                         r = r if pd.notna(r) else 1.3
@@ -245,16 +242,13 @@ marcha_longitud_zancada_izq_m
                         p = p if pd.notna(p) else 6.0
                         z = z if pd.notna(z) else 1.1
                         
-                        # Calcular score y percentil
                         score = calcular_score_fragilidad(v, t, r, ii, id, da, p, z)
                         percentil = stats.percentileofscore(SCORES_COHORTE_41, score, kind='strict')
                         
-                        # Definir etiquetas
                         if score < 65: clase = "🟢 No frágil"
                         elif score <= 81: clase = "🟡 Pre-frágil"
                         else: clase = "🔴 Frágil"
                         
-                        # Intentar buscar un nombre o ID del paciente en el archivo
                         identificador = row.get('ID', row.get('Paciente', row.get('Nombre', f"Paciente {idx+1}")))
                         
                         resultados.append({
@@ -264,17 +258,19 @@ marcha_longitud_zancada_izq_m
                             "Clasificación Clínica": clase
                         })
                     
-                    # Convertir a tabla y mostrar
                     df_resultados = pd.DataFrame(resultados)
                     st.dataframe(df_resultados, use_container_width=True)
                     
-                    # Botón para descargar
-                    csv = df_resultados.to_csv(index=False).encode('utf-8')
+                    # MAGIA AQUÍ: Convertir la tabla directamente a un archivo nativo de EXCEL
+                    buffer = io.BytesIO()
+                    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                        df_resultados.to_excel(writer, index=False, sheet_name='Reporte Clínico')
+                    
                     st.download_button(
-                        label="⬇️ Descargar Reporte de Diagnóstico (CSV)",
-                        data=csv,
-                        file_name="reporte_fragilidad_pacientes.csv",
-                        mime="text/csv",
+                        label="⬇️ Descargar Reporte de Diagnóstico (Formato Excel)",
+                        data=buffer.getvalue(),
+                        file_name="Reporte_Pacientes_MoVida.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     )
         except Exception as e:
             st.error(f"Error al leer el archivo. Verifica el formato. Detalle: {e}")
