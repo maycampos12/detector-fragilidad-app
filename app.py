@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import time
 
 st.set_page_config(page_title="Mo-Vida | Fragilidad", page_icon="🏃‍♂️", layout="wide")
@@ -36,7 +37,26 @@ with col_title:
     """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# PESTAÑAS
+# CONTEXTO CLÍNICO Y CRITERIOS
+# ---------------------------------------------------------
+st.markdown("### 📌 Contexto Clínico y Criterios de Riesgo")
+st.markdown("""
+<div class="context-box">
+La fragilidad es un síndrome clínico asociado al envejecimiento, caracterizado por una disminución de la reserva fisiológica y una mayor vulnerabilidad ante factores estresantes. Su detección mediante el análisis biomecánico de la marcha permite prevenir caídas y preservar la independencia del paciente.
+</div>
+""", unsafe_allow_html=True)
+
+# Tabla de criterios
+df_criterios = pd.DataFrame({
+    "Porcentaje Obtenido": ["< 65%", "65% - 81%", "> 81%"],
+    "Clasificación Clínica": ["Bajo riesgo de fragilidad", "Riesgo medio de fragilidad", "Alto riesgo de fragilidad"]
+})
+st.table(df_criterios)
+
+st.markdown("---")
+
+# ---------------------------------------------------------
+# PESTAÑAS DE DATOS
 # ---------------------------------------------------------
 tab1, tab2 = st.tabs(["Paciente individual", "Varios pacientes (Excel/CSV)"])
 
@@ -78,17 +98,15 @@ with tab1:
         zancada_estatura = st.number_input("Zancada / estatura (izq.) (%)", value=69.7, step=0.1)
 
     # ---------------------------------------------------------
-    # BOTÓN CLASIFICAR Y DIBUJO DE RESULTADOS (DISEÑO FOTO)
+    # BOTÓN CLASIFICAR Y DIBUJO DE RESULTADOS
     # ---------------------------------------------------------
     st.markdown("<br>", unsafe_allow_html=True)
     
-    # Creamos dos columnas para que el botón no ocupe toda la pantalla, como en tu foto
     col_btn, _ = st.columns([1, 5])
     if col_btn.button("Clasificar"):
         with st.spinner('Procesando...'):
             time.sleep(1) 
             
-            # --- Lógica dinámica de simulación de tu K-Means ---
             score_riesgo = 20.0
             if vel_marcha < 0.8: score_riesgo += 35
             elif vel_marcha < 1.1: score_riesgo += 15
@@ -102,65 +120,47 @@ with tab1:
             
             score_riesgo = min(99.9, max(5.0, score_riesgo))
 
-            # --- Definir colores y textos según el resultado ---
             if score_riesgo < 65:
                 clase = "No frágil"
-                color_texto = "#14532d" # Verde oscuro
-                color_bg = "#f0fdf4"    # Verde muy claro (fondo)
-                color_barra = "#15803d" # Verde barra
+                color_texto = "#14532d" 
+                color_bg = "#f0fdf4"    
             elif score_riesgo <= 81:
                 clase = "Pre-frágil"
-                color_texto = "#713f12" # Naranja/Café oscuro
-                color_bg = "#fefce8"    # Amarillo claro (fondo)
-                color_barra = "#ca8a04" # Amarillo barra
+                color_texto = "#713f12" 
+                color_bg = "#fefce8"    
             else:
                 clase = "Frágil"
-                color_texto = "#7f1d1d" # Rojo oscuro
-                color_bg = "#fef2f2"    # Rojo claro (fondo)
-                color_barra = "#b91c1c" # Rojo barra
+                color_texto = "#7f1d1d" 
+                color_bg = "#fef2f2"    
 
-            # --- DIBUJAR EL RESULTADO EN HTML PARA QUE QUEDE EXACTO A TU IMAGEN ---
+            # ¡AQUÍ ESTÁ LA MAGIA! Cero espacios a la izquierda para evitar que se vuelva un bloque de código
             html_resultado = f"""
-            <div style="background-color: {color_bg}; border: 1px solid {color_texto}; border-radius: 8px; padding: 30px; margin-top: 15px; margin-bottom: 10px;">
-                <h1 style="color: {color_texto}; font-size: 36px; margin-bottom: 25px; font-family: Georgia, serif;">{clase}</h1>
-                
-                <p style="font-size: 16px; color: #1f2937; margin-bottom: 5px;"><strong>Probabilidad de "Frágil": {score_riesgo:.1f}%</strong></p>
-                
-                <!-- Barra de probabilidad (Gris con relleno de color) -->
-                <div style="width: 100%; background-color: #d1d5db; border-radius: 4px; height: 12px; margin-bottom: 10px;">
-                    <div style="width: {score_riesgo}%; background-color: {color_texto}; height: 12px; border-radius: 4px;"></div>
-                </div>
-                
-                <p style="font-size: 13px; color: #6b7280; margin-bottom: 45px;">10 de 10 variables imputadas con la mediana de entrenamiento.</p>
-                
-                <p style="font-size: 14px; font-weight: bold; color: #111827; margin-bottom: 40px;">📍 Comparativa Clínica: Posición en la base de datos (41 pacientes):</p>
-                
-                <!-- Gradiente y Tooltip del Percentil -->
-                <div style="position: relative; width: 100%; height: 14px; background: linear-gradient(to right, #86efac, #fde047, #fca5a5); border-radius: 6px; border: 1px solid #9ca3af; margin-bottom: 5px;">
-                    <!-- Tooltip negro flotante -->
-                    <div style="position: absolute; left: calc({score_riesgo}% - 55px); top: -38px; background-color: #111827; color: white; padding: 4px 12px; border-radius: 6px; font-size: 12px; font-weight: bold; text-align: center; width: 110px; z-index: 10;">
-                        Tú (Percentil {int(score_riesgo)})
-                        <!-- Triangulito del tooltip -->
-                        <div style="position: absolute; bottom: -5px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 6px solid #111827;"></div>
-                    </div>
-                </div>
-                
-                <div style="display: flex; justify-content: space-between; font-size: 11px; color: #6b7280; margin-top: 5px;">
-                    <span>0% (Saludable)</span>
-                    <span>Mediana (50%)</span>
-                    <span>100% (Frágil)</span>
-                </div>
-            </div>
-            """
-            # Renderizamos el HTML
+<div style="background-color: {color_bg}; border: 1px solid {color_texto}; border-radius: 8px; padding: 30px; margin-top: 15px; margin-bottom: 10px;">
+<h1 style="color: {color_texto}; font-size: 36px; margin-bottom: 25px; font-family: Georgia, serif;">{clase}</h1>
+<p style="font-size: 16px; color: #1f2937; margin-bottom: 5px;"><strong>Probabilidad de "Frágil": {score_riesgo:.1f}%</strong></p>
+<div style="width: 100%; background-color: #d1d5db; border-radius: 4px; height: 12px; margin-bottom: 10px;">
+<div style="width: {score_riesgo}%; background-color: {color_texto}; height: 12px; border-radius: 4px;"></div>
+</div>
+<p style="font-size: 13px; color: #6b7280; margin-bottom: 45px;">10 de 10 variables imputadas con la mediana de entrenamiento.</p>
+<p style="font-size: 14px; font-weight: bold; color: #111827; margin-bottom: 40px;">📍 Comparativa Clínica: Posición en la base de datos (41 pacientes):</p>
+<div style="position: relative; width: 100%; height: 14px; background: linear-gradient(to right, #86efac, #fde047, #fca5a5); border-radius: 6px; border: 1px solid #9ca3af; margin-bottom: 5px;">
+<div style="position: absolute; left: calc({score_riesgo}% - 55px); top: -38px; background-color: #111827; color: white; padding: 4px 12px; border-radius: 6px; font-size: 12px; font-weight: bold; text-align: center; width: 110px; z-index: 10;">
+Tú (Posición {int(score_riesgo)})
+<div style="position: absolute; bottom: -5px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 6px solid #111827;"></div>
+</div>
+</div>
+<div style="display: flex; justify-content: space-between; font-size: 11px; color: #6b7280; margin-top: 5px;">
+<span>0% (Saludable)</span><span>Mediana (50%)</span><span>100% (Frágil)</span>
+</div>
+</div>
+"""
             st.markdown(html_resultado, unsafe_allow_html=True)
             
-            # Textos aclaratorios
             st.markdown("""
-            <p style="font-size: 12px; color: #9ca3af; margin-top: 5px;">
-            Etiqueta "Frágil"/"No frágil" derivada de un clustering no supervisado (K-Means) sobre 41 pacientes, no de un criterio clínico validado (Fried, SPPB, etc.). Usar solo como apoyo exploratorio.
-            </p>
-            """, unsafe_allow_html=True)
+<p style="font-size: 12px; color: #9ca3af; margin-top: 5px;">
+Etiqueta "Frágil"/"No frágil" derivada de un clustering no supervisado (K-Means) sobre 41 pacientes, no de un criterio clínico validado (Fried, SPPB, etc.). Usar solo como apoyo exploratorio.
+</p>
+""", unsafe_allow_html=True)
 
 with tab2:
     st.info("Sube el archivo `Datos_Consolidados_TUG_Corregidos.xlsx` con los 41 pacientes para ejecutar el clustering completo.")
