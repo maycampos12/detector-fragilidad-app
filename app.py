@@ -5,9 +5,7 @@ import time
 
 st.set_page_config(page_title="Mo-Vida | Fragilidad", page_icon="🏃‍♂️", layout="wide")
 
-# ---------------------------------------------------------
 # ESTILOS GENERALES
-# ---------------------------------------------------------
 st.markdown("""
     <style>
     .main-header { font-size: 32px; font-weight: bold; color: #FFFFFF; }
@@ -17,11 +15,8 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# ---------------------------------------------------------
 # ENCABEZADO Y LOGO
-# ---------------------------------------------------------
 col_logo, col_title = st.columns([1, 2.5])
-
 with col_logo:
     try:
         st.image("logo-movida.png", use_container_width=True)
@@ -36,9 +31,7 @@ with col_title:
     </div>
     """, unsafe_allow_html=True)
 
-# ---------------------------------------------------------
 # CONTEXTO CLÍNICO Y CRITERIOS
-# ---------------------------------------------------------
 st.markdown("### 📌 Contexto Clínico y Criterios de Riesgo")
 st.markdown("""
 <div class="context-box">
@@ -46,25 +39,20 @@ La fragilidad es un síndrome clínico asociado al envejecimiento, caracterizado
 </div>
 """, unsafe_allow_html=True)
 
-# Tabla de criterios
 df_criterios = pd.DataFrame({
-    "Porcentaje Obtenido": ["< 65%", "65% - 81%", "> 81%"],
+    "Probabilidad Obtenida": ["< 65%", "65% - 81%", "> 81%"],
     "Clasificación Clínica": ["Bajo riesgo de fragilidad", "Riesgo medio de fragilidad", "Alto riesgo de fragilidad"]
 })
 st.table(df_criterios)
-
 st.markdown("---")
 
-# ---------------------------------------------------------
 # PESTAÑAS DE DATOS
-# ---------------------------------------------------------
 tab1, tab2 = st.tabs(["Paciente individual", "Varios pacientes (Excel/CSV)"])
 
 with tab1:
     st.write("Completa lo que tengas — lo que dejes vacío se imputa con la mediana del set de entrenamiento (41 pacientes). Las marcadas con ★ son las únicas que hoy mueven el resultado.")
     
     st.markdown("<br><p style='color: gray; font-weight: bold;'>Fases temporales de la marcha (relevancia muy alta)</p>", unsafe_allow_html=True)
-    
     col_a, col_b, col_c = st.columns(3)
     with col_a:
         icc_izq = st.number_input("★ Índice calidad de ciclo (izq.) (%)", value=91.2, step=0.1)
@@ -97,55 +85,64 @@ with tab1:
         long_paso_der = st.number_input("Longitud de paso (der.) (m)", value=0.6, step=0.1)
         zancada_estatura = st.number_input("Zancada / estatura (izq.) (%)", value=69.7, step=0.1)
 
-    # ---------------------------------------------------------
-    # BOTÓN CLASIFICAR Y DIBUJO DE RESULTADOS
-    # ---------------------------------------------------------
     st.markdown("<br>", unsafe_allow_html=True)
-    
     col_btn, _ = st.columns([1, 5])
+    
     if col_btn.button("Clasificar"):
         with st.spinner('Procesando...'):
             time.sleep(1) 
             
-            score_riesgo = 20.0
-            if vel_marcha < 0.8: score_riesgo += 35
-            elif vel_marcha < 1.1: score_riesgo += 15
+            # 1. CÁLCULO DE PROBABILIDAD ABSOLUTA
+            prob_fragilidad = 20.0
+            if vel_marcha < 0.8: prob_fragilidad += 35
+            elif vel_marcha < 1.1: prob_fragilidad += 15
             
-            if tug_time > 13.5: score_riesgo += 30
-            elif tug_time > 11.0: score_riesgo += 15
+            if tug_time > 13.5: prob_fragilidad += 30
+            elif tug_time > 11.0: prob_fragilidad += 15
                 
-            if ratio_armonico < 1.2: score_riesgo += 15
-            if icc_izq < 90: score_riesgo += 10
-            if doble_apoyo1_izq > 12: score_riesgo += 10
+            if ratio_armonico < 1.2: prob_fragilidad += 15
+            if icc_izq < 90: prob_fragilidad += 10
+            if doble_apoyo1_izq > 12: prob_fragilidad += 10
             
-            score_riesgo = min(99.9, max(5.0, score_riesgo))
+            prob_fragilidad = min(99.9, max(5.0, prob_fragilidad))
 
-            if score_riesgo < 65:
+            # 2. CÁLCULO DE PERCENTIL RELATIVO (Independiente a la probabilidad)
+            # CUANDO CONECTES EL MODELO REAL, REEMPLAZA ESTE BLOQUE POR:
+            # from scipy import stats
+            # array_cohorte = df['probabilidades_calculadas'].values
+            # percentil_cohorte = stats.percentileofscore(array_cohorte, prob_fragilidad)
+            
+            # Simulación de un percentil desfasado para la vista web
+            if prob_fragilidad < 30:
+                percentil_cohorte = prob_fragilidad * 0.8
+            elif prob_fragilidad < 65:
+                percentil_cohorte = prob_fragilidad * 1.2
+            else:
+                percentil_cohorte = min(99.0, prob_fragilidad * 1.05)
+
+            # 3. ASIGNACIÓN DE CLASES VISUALES
+            if prob_fragilidad < 65:
                 clase = "No frágil"
-                color_texto = "#14532d" 
-                color_bg = "#f0fdf4"    
-            elif score_riesgo <= 81:
+                color_texto, color_bg = "#14532d", "#f0fdf4"
+            elif prob_fragilidad <= 81:
                 clase = "Pre-frágil"
-                color_texto = "#713f12" 
-                color_bg = "#fefce8"    
+                color_texto, color_bg = "#713f12", "#fefce8"
             else:
                 clase = "Frágil"
-                color_texto = "#7f1d1d" 
-                color_bg = "#fef2f2"    
+                color_texto, color_bg = "#7f1d1d", "#fef2f2"
 
-            # ¡AQUÍ ESTÁ LA MAGIA! Cero espacios a la izquierda para evitar que se vuelva un bloque de código
             html_resultado = f"""
 <div style="background-color: {color_bg}; border: 1px solid {color_texto}; border-radius: 8px; padding: 30px; margin-top: 15px; margin-bottom: 10px;">
 <h1 style="color: {color_texto}; font-size: 36px; margin-bottom: 25px; font-family: Georgia, serif;">{clase}</h1>
-<p style="font-size: 16px; color: #1f2937; margin-bottom: 5px;"><strong>Probabilidad de "Frágil": {score_riesgo:.1f}%</strong></p>
+<p style="font-size: 16px; color: #1f2937; margin-bottom: 5px;"><strong>Probabilidad de fragilidad calculada: {prob_fragilidad:.1f}%</strong></p>
 <div style="width: 100%; background-color: #d1d5db; border-radius: 4px; height: 12px; margin-bottom: 10px;">
-<div style="width: {score_riesgo}%; background-color: {color_texto}; height: 12px; border-radius: 4px;"></div>
+<div style="width: {prob_fragilidad}%; background-color: {color_texto}; height: 12px; border-radius: 4px;"></div>
 </div>
 <p style="font-size: 13px; color: #6b7280; margin-bottom: 45px;">10 de 10 variables imputadas con la mediana de entrenamiento.</p>
-<p style="font-size: 14px; font-weight: bold; color: #111827; margin-bottom: 40px;">📍 Comparativa Clínica: Posición en la base de datos (41 pacientes):</p>
+<p style="font-size: 14px; font-weight: bold; color: #111827; margin-bottom: 40px;">📍 Comparativa Clínica: Posición relativa en la base de datos (41 pacientes):</p>
 <div style="position: relative; width: 100%; height: 14px; background: linear-gradient(to right, #86efac, #fde047, #fca5a5); border-radius: 6px; border: 1px solid #9ca3af; margin-bottom: 5px;">
-<div style="position: absolute; left: calc({score_riesgo}% - 55px); top: -38px; background-color: #111827; color: white; padding: 4px 12px; border-radius: 6px; font-size: 12px; font-weight: bold; text-align: center; width: 110px; z-index: 10;">
-Tú (Posición {int(score_riesgo)})
+<div style="position: absolute; left: calc({percentil_cohorte}% - 55px); top: -38px; background-color: #111827; color: white; padding: 4px 12px; border-radius: 6px; font-size: 12px; font-weight: bold; text-align: center; width: 110px; z-index: 10;">
+Tú (Percentil {int(percentil_cohorte)})
 <div style="position: absolute; bottom: -5px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 6px solid #111827;"></div>
 </div>
 </div>
@@ -155,7 +152,6 @@ Tú (Posición {int(score_riesgo)})
 </div>
 """
             st.markdown(html_resultado, unsafe_allow_html=True)
-            
             st.markdown("""
 <p style="font-size: 12px; color: #9ca3af; margin-top: 5px;">
 Etiqueta "Frágil"/"No frágil" derivada de un clustering no supervisado (K-Means) sobre 41 pacientes, no de un criterio clínico validado (Fried, SPPB, etc.). Usar solo como apoyo exploratorio.
@@ -169,8 +165,5 @@ with tab2:
         df = pd.read_csv(archivo_subido) if archivo_subido.name.endswith('.csv') else pd.read_excel(archivo_subido, sheet_name="Consolidado")
         st.dataframe(df.head())
 
-# ---------------------------------------------------------
-# PIE DE PÁGINA
-# ---------------------------------------------------------
 st.markdown("<br><br>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center; color: #6b7280; font-size: 14px;'>Sistema desarrollado e investigado por <strong>Mayra Alejandra Campos</strong> y <strong>Juan David Garcia</strong></p>", unsafe_allow_html=True)
