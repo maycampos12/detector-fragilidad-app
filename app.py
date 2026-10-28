@@ -2,10 +2,13 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import time
+from scipy import stats
 
 st.set_page_config(page_title="Mo-Vida | Fragilidad", page_icon="🏃‍♂️", layout="wide")
 
+# ---------------------------------------------------------
 # ESTILOS GENERALES
+# ---------------------------------------------------------
 st.markdown("""
     <style>
     .main-header { font-size: 32px; font-weight: bold; color: #FFFFFF; }
@@ -15,7 +18,61 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# ---------------------------------------------------------
+# CARGA DE BASE DE DATOS (Cohorte de 41 pacientes)
+# ---------------------------------------------------------
+@st.cache_data
+def load_data():
+    try:
+        # Asegúrate de que este archivo esté en tu repositorio de GitHub
+        df = pd.read_excel("Datos_Consolidados_TUG_Corregidos.xlsx", sheet_name="Consolidado")
+        return df
+    except:
+        return pd.DataFrame()
+
+df_cohorte = load_data()
+
+# ---------------------------------------------------------
+# FUNCIÓN MATEMÁTICA MULTIVARIABLE (Simula el K-Means)
+# ---------------------------------------------------------
+def calcular_score_fragilidad(v, tug, ratio, icc_i, icc_d, da1_i, prop_d, zancada_i):
+    riesgo = 20.0 # Riesgo base
+    
+    # 1. Velocidad (Peso: 30)
+    if v < 0.6: riesgo += 30
+    elif v < 0.8: riesgo += 20
+    elif v < 1.0: riesgo += 10
+    elif v > 1.3: riesgo -= 5 # Bonificación por marcha rápida
+    
+    # 2. TUG (Peso: 25)
+    if tug > 14.0: riesgo += 25
+    elif tug > 12.0: riesgo += 15
+    elif tug > 10.5: riesgo += 5
+    elif tug < 9.0: riesgo -= 5 # Bonificación por agilidad
+        
+    # 3. Ratio Armónico (Peso: 10)
+    if ratio < 1.2: riesgo += 10
+    elif ratio < 1.4: riesgo += 5
+        
+    # 4. Índices de Calidad de Ciclo (Peso: 10)
+    if icc_i < 90: riesgo += 5
+    if icc_d < 90: riesgo += 5
+        
+    # 5. Doble Apoyo (Peso: 10)
+    if da1_i > 13: riesgo += 10
+    elif da1_i > 11.5: riesgo += 5
+        
+    # 6. Propulsión (Peso: 5)
+    if prop_d < 5.5: riesgo += 5
+        
+    # 7. Longitud de Zancada (Peso: 5)
+    if zancada_i < 0.9: riesgo += 5
+    
+    return min(99.9, max(0.1, riesgo))
+
+# ---------------------------------------------------------
 # ENCABEZADO Y LOGO
+# ---------------------------------------------------------
 col_logo, col_title = st.columns([1, 2.5])
 with col_logo:
     try:
@@ -31,7 +88,9 @@ with col_title:
     </div>
     """, unsafe_allow_html=True)
 
+# ---------------------------------------------------------
 # CONTEXTO CLÍNICO Y CRITERIOS
+# ---------------------------------------------------------
 st.markdown("### 📌 Contexto Clínico y Criterios de Riesgo")
 st.markdown("""
 <div class="context-box">
@@ -40,13 +99,15 @@ La fragilidad es un síndrome clínico asociado al envejecimiento, caracterizado
 """, unsafe_allow_html=True)
 
 df_criterios = pd.DataFrame({
-    "Probabilidad Obtenida": ["< 65%", "65% - 81%", "> 81%"],
+    "Porcentaje Obtenido": ["< 65%", "65% - 81%", "> 81%"],
     "Clasificación Clínica": ["Bajo riesgo de fragilidad", "Riesgo medio de fragilidad", "Alto riesgo de fragilidad"]
 })
 st.table(df_criterios)
 st.markdown("---")
 
+# ---------------------------------------------------------
 # PESTAÑAS DE DATOS
+# ---------------------------------------------------------
 tab1, tab2 = st.tabs(["Paciente individual", "Varios pacientes (Excel/CSV)"])
 
 with tab1:
@@ -59,10 +120,10 @@ with tab1:
         fase_osc_izq = st.number_input("Fase de oscilación (izq.) (%)", value=36.8, step=0.1)
         apoyo_mono_der = st.number_input("Apoyo monopodal (der.) (%)", value=37.1, step=0.1)
         apoyo_mono_izq = st.number_input("Apoyo monopodal (izq.) (%)", value=38.6, step=0.1)
-        propulsion_der = st.number_input("Propulsión (der.)", value=6.2, step=0.1)
+        propulsion_der = st.number_input("★ Propulsión (der.)", value=6.2, step=0.1)
     with col_b:
         doble_apoyo1_izq = st.number_input("★ Doble apoyo 1 (izq.) (%)", value=13.6, step=0.1)
-        icc_der = st.number_input("Índice de calidad de ciclo (der.) (%)", value=90.3, step=0.1)
+        icc_der = st.number_input("★ Índice de calidad de ciclo (der.) (%)", value=90.3, step=0.1)
         doble_apoyo2_der = st.number_input("Doble apoyo 2 (der.) (%)", value=13.3, step=0.1)
         fase_osc_der = st.number_input("Fase de oscilación (der.) (%)", value=36.4, step=0.1)
         ratio_armonico = st.number_input("★ Ratio armónico", value=1.3, step=0.1)
@@ -77,7 +138,7 @@ with tab1:
     col_d, col_e, col_f = st.columns(3)
     with col_d:
         vel_marcha = st.number_input("★ Velocidad de marcha (m/s)", value=0.9, step=0.1)
-        long_zancada_izq = st.number_input("Longitud de zancada (izq.) (m)", value=1.2, step=0.1)
+        long_zancada_izq = st.number_input("★ Longitud de zancada (izq.) (m)", value=1.2, step=0.1)
     with col_e:
         long_paso_izq = st.number_input("Longitud de paso (izq.) (m)", value=0.6, step=0.1)
         long_zancada_der = st.number_input("Longitud de zancada (der.) (m)", value=1.2, step=0.1)
@@ -85,40 +146,54 @@ with tab1:
         long_paso_der = st.number_input("Longitud de paso (der.) (m)", value=0.6, step=0.1)
         zancada_estatura = st.number_input("Zancada / estatura (izq.) (%)", value=69.7, step=0.1)
 
+    # ---------------------------------------------------------
+    # BOTÓN CLASIFICAR Y DIBUJO DE RESULTADOS
+    # ---------------------------------------------------------
     st.markdown("<br>", unsafe_allow_html=True)
     col_btn, _ = st.columns([1, 5])
     
     if col_btn.button("Clasificar"):
-        with st.spinner('Procesando...'):
+        with st.spinner('Evaluando 8 variables y comparando con cohorte...'):
             time.sleep(1) 
             
-            # 1. CÁLCULO DE PROBABILIDAD ABSOLUTA
-            prob_fragilidad = 20.0
-            if vel_marcha < 0.8: prob_fragilidad += 35
-            elif vel_marcha < 1.1: prob_fragilidad += 15
-            
-            if tug_time > 13.5: prob_fragilidad += 30
-            elif tug_time > 11.0: prob_fragilidad += 15
-                
-            if ratio_armonico < 1.2: prob_fragilidad += 15
-            if icc_izq < 90: prob_fragilidad += 10
-            if doble_apoyo1_izq > 12: prob_fragilidad += 10
-            
-            prob_fragilidad = min(99.9, max(5.0, prob_fragilidad))
+            # 1. EVALUAR PACIENTE ACTUAL (MULTIVARIABLE)
+            prob_fragilidad = calcular_score_fragilidad(
+                vel_marcha, tug_time, ratio_armonico, icc_izq, icc_der, 
+                doble_apoyo1_izq, propulsion_der, long_zancada_izq
+            )
 
-            # 2. CÁLCULO DE PERCENTIL RELATIVO (Independiente a la probabilidad)
-            # CUANDO CONECTES EL MODELO REAL, REEMPLAZA ESTE BLOQUE POR:
-            # from scipy import stats
-            # array_cohorte = df['probabilidades_calculadas'].values
-            # percentil_cohorte = stats.percentileofscore(array_cohorte, prob_fragilidad)
-            
-            # Simulación de un percentil desfasado para la vista web
-            if prob_fragilidad < 30:
-                percentil_cohorte = prob_fragilidad * 0.8
-            elif prob_fragilidad < 65:
-                percentil_cohorte = prob_fragilidad * 1.2
+            # 2. EVALUAR A LOS 41 PACIENTES DE LA BASE DE DATOS Y SACAR PERCENTIL
+            if not df_cohorte.empty:
+                scores_cohorte = []
+                for index, row in df_cohorte.iterrows():
+                    # Extraer datos de la BD con prevención de errores (Na/NaN)
+                    v = row.get('marcha_velocidad_ms', 1.0)
+                    t = row.get('tug_tug_tiempo_total_s', 12.0)
+                    r = row.get('marcha_ratio_armonico', 1.3)
+                    ii = row.get('marcha_indice_calidad_ciclo_izq_pct', 92.0)
+                    id = row.get('marcha_indice_calidad_ciclo_der_pct', 92.0)
+                    da = row.get('marcha_i_doble_apoyo1_pct', 11.0)
+                    p = row.get('marcha_propulsion_der', 6.0)
+                    z = row.get('marcha_longitud_zancada_izq_m', 1.1)
+                    
+                    # Manejo de nulos puros
+                    v = v if pd.notna(v) else 1.0
+                    t = t if pd.notna(t) else 12.0
+                    r = r if pd.notna(r) else 1.3
+                    ii = ii if pd.notna(ii) else 92.0
+                    id = id if pd.notna(id) else 92.0
+                    da = da if pd.notna(da) else 11.0
+                    p = p if pd.notna(p) else 6.0
+                    z = z if pd.notna(z) else 1.1
+                    
+                    score_bd = calcular_score_fragilidad(v, t, r, ii, id, da, p, z)
+                    scores_cohorte.append(score_bd)
+                
+                # Calcular en qué posición estricta queda el paciente vs los 41 reales
+                percentil_cohorte = stats.percentileofscore(scores_cohorte, prob_fragilidad, kind='strict')
             else:
-                percentil_cohorte = min(99.0, prob_fragilidad * 1.05)
+                # Si falla la lectura del Excel, usa la probabilidad absoluta como guía visual
+                percentil_cohorte = prob_fragilidad
 
             # 3. ASIGNACIÓN DE CLASES VISUALES
             if prob_fragilidad < 65:
@@ -134,15 +209,15 @@ with tab1:
             html_resultado = f"""
 <div style="background-color: {color_bg}; border: 1px solid {color_texto}; border-radius: 8px; padding: 30px; margin-top: 15px; margin-bottom: 10px;">
 <h1 style="color: {color_texto}; font-size: 36px; margin-bottom: 25px; font-family: Georgia, serif;">{clase}</h1>
-<p style="font-size: 16px; color: #1f2937; margin-bottom: 5px;"><strong>Probabilidad de fragilidad calculada: {prob_fragilidad:.1f}%</strong></p>
+<p style="font-size: 16px; color: #1f2937; margin-bottom: 5px;"><strong>Probabilidad de "Frágil": {prob_fragilidad:.1f}%</strong></p>
 <div style="width: 100%; background-color: #d1d5db; border-radius: 4px; height: 12px; margin-bottom: 10px;">
 <div style="width: {prob_fragilidad}%; background-color: {color_texto}; height: 12px; border-radius: 4px;"></div>
 </div>
-<p style="font-size: 13px; color: #6b7280; margin-bottom: 45px;">10 de 10 variables imputadas con la mediana de entrenamiento.</p>
-<p style="font-size: 14px; font-weight: bold; color: #111827; margin-bottom: 40px;">📍 Comparativa Clínica: Posición relativa en la base de datos (41 pacientes):</p>
+<p style="font-size: 13px; color: #6b7280; margin-bottom: 45px;">Se evaluaron 8 variables (Nivel 1 y 2) frente a la distribución clínica.</p>
+<p style="font-size: 14px; font-weight: bold; color: #111827; margin-bottom: 40px;">📍 Comparativa Clínica: Posición en la base de datos (41 pacientes):</p>
 <div style="position: relative; width: 100%; height: 14px; background: linear-gradient(to right, #86efac, #fde047, #fca5a5); border-radius: 6px; border: 1px solid #9ca3af; margin-bottom: 5px;">
 <div style="position: absolute; left: calc({percentil_cohorte}% - 55px); top: -38px; background-color: #111827; color: white; padding: 4px 12px; border-radius: 6px; font-size: 12px; font-weight: bold; text-align: center; width: 110px; z-index: 10;">
-Tú (Percentil {int(percentil_cohorte)})
+Tú (Posición {int(percentil_cohorte)})
 <div style="position: absolute; bottom: -5px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 6px solid #111827;"></div>
 </div>
 </div>
