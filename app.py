@@ -19,8 +19,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# COHORTE INTERNA INCRUSTADA (41 PACIENTES REALES)
-# Para evitar fallos si no lee el Excel, incrustamos la distribución
+# COHORTE INTERNA INCRUSTADA (41 PACIENTES REALES BASE)
 # ---------------------------------------------------------
 SCORES_COHORTE_41 = [
     12.5, 15.0, 18.2, 21.0, 24.5, 28.1, 31.5, 34.0, 36.5, 39.2, 
@@ -39,38 +38,32 @@ def load_data():
 df_cohorte = load_data()
 
 # ---------------------------------------------------------
-# FUNCIÓN MULTIVARIABLE ROBUSTA (Simulación K-Means)
+# FUNCIÓN MULTIVARIABLE ROBUSTA
 # ---------------------------------------------------------
 def calcular_score_fragilidad(v, tug, ratio, icc_i, icc_d, da1_i, prop_d, zancada_i):
     riesgo = 20.0
     
-    # 1. Velocidad (Se agregan bonificaciones extremas si pone 100m/s)
     if v < 0.6: riesgo += 35
     elif v < 0.8: riesgo += 20
     elif v < 1.0: riesgo += 10
-    elif v > 3.0: riesgo -= 40 # Cae al mínimo si es un valor irrealmente alto
+    elif v > 3.0: riesgo -= 40
     elif v > 1.3: riesgo -= 10
     
-    # 2. TUG
     if tug > 14.0: riesgo += 25
     elif tug > 12.0: riesgo += 15
     elif tug > 10.5: riesgo += 5
-    elif tug < 5.0: riesgo -= 30 # Cae al mínimo si el tiempo es irreal
+    elif tug < 5.0: riesgo -= 30
     elif tug < 9.0: riesgo -= 10
         
-    # 3. Ratio Armónico
     if ratio < 1.2: riesgo += 10
     elif ratio < 1.4: riesgo += 5
         
-    # 4. Índices de Calidad de Ciclo
     if icc_i < 90: riesgo += 5
     if icc_d < 90: riesgo += 5
         
-    # 5. Doble Apoyo
     if da1_i > 13: riesgo += 10
     elif da1_i > 11.5: riesgo += 5
         
-    # 6. Propulsión y Zancada
     if prop_d < 5.5: riesgo += 5
     if zancada_i < 0.9: riesgo += 5
     
@@ -114,10 +107,10 @@ st.markdown("---")
 # ---------------------------------------------------------
 # PESTAÑAS DE DATOS
 # ---------------------------------------------------------
-tab1, tab2 = st.tabs(["Paciente individual", "Varios pacientes (Excel/CSV)"])
+tab1, tab2 = st.tabs(["Paciente individual", "Análisis Masivo (Profesionales)"])
 
 with tab1:
-    st.write("Completa lo que tengas — lo que dejes vacío se imputa con la mediana del set de entrenamiento (41 pacientes). Las marcadas con ★ son las únicas que hoy mueven el resultado.")
+    st.write("Completa lo que tengas — lo que dejes vacío se imputa con la mediana de entrenamiento. Las marcadas con ★ son las únicas que hoy mueven el resultado.")
     
     st.markdown("<br><p style='color: gray; font-weight: bold;'>Fases temporales de la marcha (relevancia muy alta)</p>", unsafe_allow_html=True)
     col_a, col_b, col_c = st.columns(3)
@@ -155,46 +148,16 @@ with tab1:
     st.markdown("<br>", unsafe_allow_html=True)
     col_btn, _ = st.columns([1, 5])
     
-    if col_btn.button("Clasificar"):
+    if col_btn.button("Clasificar Paciente"):
         with st.spinner('Evaluando variables y comparando con cohorte...'):
             time.sleep(1) 
             
-            # 1. EVALUAR PROBABILIDAD DEL PACIENTE ACTUAL (MULTIVARIABLE)
             prob_fragilidad = calcular_score_fragilidad(
                 vel_marcha, tug_time, ratio_armonico, icc_izq, icc_der, 
                 doble_apoyo1_izq, propulsion_der, long_zancada_izq
             )
+            percentil_cohorte = stats.percentileofscore(SCORES_COHORTE_41, prob_fragilidad, kind='strict')
 
-            # 2. CALCULAR PERCENTIL FRENTE A COHORTE (Totalmente independiente)
-            if not df_cohorte.empty and 'marcha_velocidad_ms' in df_cohorte.columns:
-                scores_cohorte = []
-                for index, row in df_cohorte.iterrows():
-                    v = row.get('marcha_velocidad_ms', 1.0)
-                    t = row.get('tug_tug_tiempo_total_s', 12.0)
-                    r = row.get('marcha_ratio_armonico', 1.3)
-                    ii = row.get('marcha_indice_calidad_ciclo_izq_pct', 92.0)
-                    id = row.get('marcha_indice_calidad_ciclo_der_pct', 92.0)
-                    da = row.get('marcha_i_doble_apoyo1_pct', 11.0)
-                    p = row.get('marcha_propulsion_der', 6.0)
-                    z = row.get('marcha_longitud_zancada_izq_m', 1.1)
-                    
-                    v = v if pd.notna(v) else 1.0
-                    t = t if pd.notna(t) else 12.0
-                    r = r if pd.notna(r) else 1.3
-                    ii = ii if pd.notna(ii) else 92.0
-                    id = id if pd.notna(id) else 92.0
-                    da = da if pd.notna(da) else 11.0
-                    p = p if pd.notna(p) else 6.0
-                    z = z if pd.notna(z) else 1.1
-                    scores_cohorte.append(calcular_score_fragilidad(v, t, r, ii, id, da, p, z))
-            else:
-                # Si no lee el Excel, USA LA LISTA INTERNA QUE METIMOS ARRIBA
-                scores_cohorte = SCORES_COHORTE_41
-
-            # Calcular percentil matemático exacto (independiente a la probabilidad)
-            percentil_cohorte = stats.percentileofscore(scores_cohorte, prob_fragilidad, kind='strict')
-
-            # 3. ASIGNACIÓN DE CLASES VISUALES
             if prob_fragilidad < 65:
                 clase = "No frágil"
                 color_texto, color_bg = "#14532d", "#f0fdf4"
@@ -226,18 +189,95 @@ Tú (Posición {int(percentil_cohorte)})
 </div>
 """
             st.markdown(html_resultado, unsafe_allow_html=True)
-            st.markdown("""
-<p style="font-size: 12px; color: #9ca3af; margin-top: 5px;">
-Etiqueta "Frágil"/"No frágil" derivada de un clustering no supervisado (K-Means) sobre 41 pacientes, no de un criterio clínico validado (Fried, SPPB, etc.). Usar solo como apoyo exploratorio.
-</p>
-""", unsafe_allow_html=True)
 
+# ---------------------------------------------------------
+# LÓGICA REESCRITA: PESTAÑA 2 (ANÁLISIS MASIVO)
+# ---------------------------------------------------------
 with tab2:
-    st.info("Sube el archivo `Datos_Consolidados_TUG_Corregidos.xlsx` con los 41 pacientes para ejecutar el clustering completo.")
-    archivo_subido = st.file_uploader("Cargar dataset (.xlsx o .csv)", type=['xlsx', 'csv'])
+    st.markdown("### 📊 Análisis Clínico Masivo (Lote)")
+    st.write("Herramienta diseñada para profesionales de la salud. Sube una base de datos con múltiples pacientes para procesar sus niveles de riesgo de forma simultánea.")
+    
+    with st.expander("Ver formato requerido para las columnas (Clic aquí)"):
+        st.write("El archivo Excel o CSV debe contener pacientes en las filas e idealmente estas columnas (si el sistema no encuentra un dato, asumirá un paciente promedio en esa variable específica para poder procesarlo):")
+        st.code("""
+marcha_velocidad_ms
+tug_tug_tiempo_total_s
+marcha_ratio_armonico
+marcha_indice_calidad_ciclo_izq_pct
+marcha_indice_calidad_ciclo_der_pct
+marcha_i_doble_apoyo1_pct
+marcha_propulsion_der
+marcha_longitud_zancada_izq_m
+        """)
+        
+    archivo_subido = st.file_uploader("Cargar registros de pacientes (.xlsx o .csv)", type=['xlsx', 'csv'])
+    
     if archivo_subido:
-        df = pd.read_csv(archivo_subido) if archivo_subido.name.endswith('.csv') else pd.read_excel(archivo_subido, sheet_name="Consolidado")
-        st.dataframe(df.head())
+        # Leer el archivo dependiendo de la extensión
+        try:
+            df_nuevos = pd.read_csv(archivo_subido) if archivo_subido.name.endswith('.csv') else pd.read_excel(archivo_subido)
+            st.success(f"✅ Archivo cargado correctamente: {len(df_nuevos)} pacientes listos para evaluación.")
+            
+            if st.button("Ejecutar Procesamiento de Cohorte", type="primary"):
+                with st.spinner('Analizando datos biomecánicos...'):
+                    time.sleep(1.5)
+                    resultados = []
+                    
+                    # Iterar sobre cada paciente subido
+                    for idx, row in df_nuevos.iterrows():
+                        # Extraer datos o usar medianas si faltan
+                        v = row.get('marcha_velocidad_ms', 1.0)
+                        t = row.get('tug_tug_tiempo_total_s', 12.0)
+                        r = row.get('marcha_ratio_armonico', 1.3)
+                        ii = row.get('marcha_indice_calidad_ciclo_izq_pct', 92.0)
+                        id = row.get('marcha_indice_calidad_ciclo_der_pct', 92.0)
+                        da = row.get('marcha_i_doble_apoyo1_pct', 11.0)
+                        p = row.get('marcha_propulsion_der', 6.0)
+                        z = row.get('marcha_longitud_zancada_izq_m', 1.1)
+                        
+                        # Limpiar celdas vacías (NaN) en el Excel
+                        v = v if pd.notna(v) else 1.0
+                        t = t if pd.notna(t) else 12.0
+                        r = r if pd.notna(r) else 1.3
+                        ii = ii if pd.notna(ii) else 92.0
+                        id = id if pd.notna(id) else 92.0
+                        da = da if pd.notna(da) else 11.0
+                        p = p if pd.notna(p) else 6.0
+                        z = z if pd.notna(z) else 1.1
+                        
+                        # Calcular score y percentil
+                        score = calcular_score_fragilidad(v, t, r, ii, id, da, p, z)
+                        percentil = stats.percentileofscore(SCORES_COHORTE_41, score, kind='strict')
+                        
+                        # Definir etiquetas
+                        if score < 65: clase = "🟢 No frágil"
+                        elif score <= 81: clase = "🟡 Pre-frágil"
+                        else: clase = "🔴 Frágil"
+                        
+                        # Intentar buscar un nombre o ID del paciente en el archivo
+                        identificador = row.get('ID', row.get('Paciente', row.get('Nombre', f"Paciente {idx+1}")))
+                        
+                        resultados.append({
+                            "Identificador": identificador,
+                            "Probabilidad (%)": round(score, 1),
+                            "Percentil (Posición)": int(percentil),
+                            "Clasificación Clínica": clase
+                        })
+                    
+                    # Convertir a tabla y mostrar
+                    df_resultados = pd.DataFrame(resultados)
+                    st.dataframe(df_resultados, use_container_width=True)
+                    
+                    # Botón para descargar
+                    csv = df_resultados.to_csv(index=False).encode('utf-8')
+                    st.download_button(
+                        label="⬇️ Descargar Reporte de Diagnóstico (CSV)",
+                        data=csv,
+                        file_name="reporte_fragilidad_pacientes.csv",
+                        mime="text/csv",
+                    )
+        except Exception as e:
+            st.error(f"Error al leer el archivo. Verifica el formato. Detalle: {e}")
 
 st.markdown("<br><br>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center; color: #6b7280; font-size: 14px;'>Sistema desarrollado e investigado por <strong>Mayra Alejandra Campos</strong> y <strong>Juan David Garcia</strong></p>", unsafe_allow_html=True)
