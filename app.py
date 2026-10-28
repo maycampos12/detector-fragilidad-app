@@ -192,7 +192,7 @@ Tú (Posición {int(percentil_cohorte)})
             st.markdown(html_resultado, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# PESTAÑA 2 (ANÁLISIS MASIVO) - AHORA EXPORTA A EXCEL NATIVO
+# PESTAÑA 2 (ANÁLISIS MASIVO) - SIN EMOJIS EN EXCEL
 # ---------------------------------------------------------
 with tab2:
     st.markdown("### 📊 Análisis Clínico Masivo (Lote)")
@@ -245,9 +245,10 @@ marcha_longitud_zancada_izq_m
                         score = calcular_score_fragilidad(v, t, r, ii, id, da, p, z)
                         percentil = stats.percentileofscore(SCORES_COHORTE_41, score, kind='strict')
                         
-                        if score < 65: clase = "🟢 No frágil"
-                        elif score <= 81: clase = "🟡 Pre-frágil"
-                        else: clase = "🔴 Frágil"
+                        # Emojis eliminados para evitar fallos tipográficos en Excel
+                        if score < 65: clase = "No frágil"
+                        elif score <= 81: clase = "Pre-frágil"
+                        else: clase = "Frágil"
                         
                         identificador = row.get('ID', row.get('Paciente', row.get('Nombre', f"Paciente {idx+1}")))
                         
@@ -261,7 +262,6 @@ marcha_longitud_zancada_izq_m
                     df_resultados = pd.DataFrame(resultados)
                     st.dataframe(df_resultados, use_container_width=True)
                     
-                    # MAGIA AQUÍ: Convertir la tabla directamente a un archivo nativo de EXCEL
                     buffer = io.BytesIO()
                     with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
                         df_resultados.to_excel(writer, index=False, sheet_name='Reporte Clínico')
